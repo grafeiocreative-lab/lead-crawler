@@ -16,15 +16,36 @@ GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 
 # Kategorije za iskanje (Google Maps query)
 SEARCH_CATEGORIES = [
+    # Zdravstvo in telo
     "zobozdravnik",
     "zobotehnik",
     "fizioterapija",
-    "masaža",
+    "masažni salon",
+    # Lepota in nega
     "kozmetični salon",
     "manikura pedikura",
     "frizerski salon",
+    "salon za obrvi trepalnice",
+    # Živali
     "pasji salon",
+    # Avto
     "avto mehanik",
+    "avto kleparstvo lakirnica",
+    "avto elektrika",
+    "vulkanizerstvo",
+    # Obrt in gradbeništvo
+    "mizar",
+    "mizarstvo pohištvo po meri",
+    "suhomontaža mavčne plošče",
+    "vodovodar vodovodne inštalacije",
+    "električar elektroinštalacije",
+    "ključavničar",
+    "slikopleskar pleskanje",
+    "tesar",
+    "krovstvo pokrivač",
+    "keramičar polaganje ploščic",
+    "steklar steklarstvo",
+    "klima servis montaža",
 ]
 
 # Lokacije za iskanje
@@ -33,6 +54,10 @@ SEARCH_LOCATIONS = [
     # "Ljubljana",
     # "Celje",
     # "Kranj",
+    # "Koper",
+    # "Novo mesto",
+    # "Ptuj",
+    # "Murska Sobota",
 ]
 
 # Google Maps: max rezultatov na iskanje

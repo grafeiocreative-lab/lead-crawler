@@ -204,7 +204,7 @@ def run_scoring(diagnostics):
 
 
 def save_scored(scored, filename="leads_scored.csv"):
-    """Shrani scored leade v CSV."""
+    """Shrani scored leade v CSV in JSON."""
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     filepath = os.path.join(OUTPUT_DIR, filename)
 
@@ -218,16 +218,27 @@ def save_scored(scored, filename="leads_scored.csv"):
         writer.writeheader()
         writer.writerows(scored)
 
-    # Izpis statistike
-    hot = sum(1 for s in scored if s["classification"] == "HOT")
-    warm = sum(1 for s in scored if s["classification"] == "WARM")
-    low = sum(1 for s in scored if s["classification"] == "LOW")
+    # Shrani tudi JSON za dashboard
+    import json
+    json_path = os.path.join(OUTPUT_DIR, "leads.json")
+    json_data = {
+        "generated": datetime.now().isoformat(),
+        "total": len(scored),
+        "hot": sum(1 for s in scored if s["classification"] == "HOT"),
+        "warm": sum(1 for s in scored if s["classification"] == "WARM"),
+        "low": sum(1 for s in scored if s["classification"] == "LOW"),
+        "leads": scored,
+    }
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(json_data, f, ensure_ascii=False, indent=2)
 
+    # Izpis statistike
     print(f"\n  === REZULTATI ===")
-    print(f"  HOT:  {hot}")
-    print(f"  WARM: {warm}")
-    print(f"  LOW:  {low}")
+    print(f"  HOT:  {json_data['hot']}")
+    print(f"  WARM: {json_data['warm']}")
+    print(f"  LOW:  {json_data['low']}")
     print(f"  Shranjeno v {filepath}")
+    print(f"  JSON za dashboard: {json_path}")
 
     return filepath
 
