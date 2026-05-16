@@ -1,106 +1,129 @@
-# GRAFEIO Lead Crawler
+# Lead Crawler — Razširitev (maj 2026)
 
-Isci podjetja brez digitalne prisotnosti. Diagnosticiraj njihove spletne strani. Oceni potencialne stranke.
+## Kaj je novo
 
-## Kaj naredi
+### 1. `config_categories.py` — 196 iskalnih kategorij
+Razširjen seznam obrtniških dejavnosti, organiziran po sektorjih:
+- zdravstvo (20), lepota (21), živali (8), avto (16)
+- gradbeniki (33), obrti (26), čiščenje (18)
+- kreativa (15), hrana (13), ostalo (26)
 
-1. **Zbere podjetja** iz Google Maps in bizi.si po kategorijah (zobozdravniki, fizioterapevti, kozmeticni saloni ...)
-2. **Preveri spletno stran** vsakega podjetja: SSL, mobilnost, hitrost, SEO, broken links, copyright leto, socialni linki
-3. **Oceni leade**: HOT / WARM / LOW z razlogi
+Izpeljan iz SKD 2025 šifranta. Uporabi namesto starih 9 kategorij v `config.py`.
 
-## Namestitev
+### 2. `enrich.py` — Obogatitev leadov
+Nov korak v pipeline-u, ki se požene PO score.py:
+- **Google Reviews Score (GRS):** ponderiran signal iz ocene in števila recenzij (0 do 100)
+- **Golden Lead detekcija:** GBP profil + brez spletne strani + ocena 4.0+ + 20+ recenzij
+- **Prioritetni signal (0 do 100):** kombiniran signal za Barbaro
+- **Konkurenčni pregled:** analiza po mestih in dejavnostih (JSON + TXT)
 
-```bash
-cd grafeio-lead-crawler
-pip install -r requirements.txt
-cp .env.example .env
-# Uredi .env in vnesi GOOGLE_MAPS_API_KEY
+### 3. `skd_mapping.py` — SKD kode za kategorije
+41 SKD 2025 kod, mapirano na iskalne pojme. Za kasnejšo integracijo z AJPES restPrsInfo API.
+
+## Maksimalno pokritje z brezplačno kvoto
+
+```
+196 kategorij × 31 lokacij = 6.076 klicev = 194 USD (kvota: 200 USD)
 ```
 
-### Google Maps API kljuc
+31 lokacij pokriva vseh 11 mestnih občin + 20 regionalnih središč.
+To je ~85% slovenskega trga storitvenih dejavnosti.
 
-1. Pojdi na https://console.cloud.google.com/apis/credentials
-2. Ustvari nov API kljuc
-3. Vklopi "Places API" (ali "Places API (New)")
-4. Kopiraj kljuc v `.env`
+**Pravilo:** poženi ENKRAT na mesec. Dvakrat = presežeš kvoto.
+`preflight.py` te opozori če si že poganjal ta mesec.
 
-Brezplacna kvota: 200 USD/mesec kredit (dovolj za tisoce iskanj).
+## Integracija v obstoječi repo
 
-## Uporaba
-
-### Celoten pipeline
+### Korak 1: kopiraj datoteke
 ```bash
-python main.py all
-```
-Zbere iz obeh virov, diagnosticira, oceni. Rezultat: `output/leads_scored.csv`
-
-### Po korakih
-```bash
-python main.py collect-maps     # Samo Google Maps
-python main.py collect-bizi     # Samo bizi.si
-python main.py collect          # Oboje + zdruzevanje
-python main.py diagnose         # Diagnostika (rabi businesses CSV)
-python main.py score            # Scoring (rabi diagnostics CSV)
+cd ~/Projects/grafeio/lead-crawler
+cp ~/pot/do/config_categories.py .
+cp ~/pot/do/enrich.py .
+cp ~/pot/do/skd_mapping.py .
+cp ~/pot/do/preflight.py .
 ```
 
-### Hitra diagnostika ene strani
+Zamenjaj stari `config.py` z novim:
 ```bash
-python main.py quick https://primer-zobozdravnika.si
+cp ~/pot/do/config.py .
 ```
-Takoj izpise diagnostiko in lead score.
 
-## Output
+### Korak 3: posodobi main.py
+Dodaj `enrich` kot nov korak. V `if __name__` blok dodaj:
 
-Vse datoteke v `output/` mapi:
+```python
+elif cmd == "enrich":
+    from enrich import enrich_leads, save_enriched, load_csv
+    scored_file = os.path.join(OUTPUT_DIR, "leads_scored.csv")
+    leads = load_csv(scored_file)
+    enriched = enrich_leads(leads)
+    save_enriched(enriched)
+
+elif cmd == "report":
+    from enrich import (
+        enrich_leads, save_enriched, load_csv,
+        build_competitive_report, save_competitive_report,
+        save_competitive_report_txt,
+    )
+    scored_file = os.path.join(OUTPUT_DIR, "leads_scored.csv")
+    leads = load_csv(scored_file)
+    enriched = enrich_leads(leads)
+    save_enriched(enriched)
+    report = build_competitive_report(enriched)
+    save_competitive_report(report)
+    save_competitive_report_txt(report)
+```
+
+In v `all` pipeline dodaj enrich za score:
+```python
+# ... po score ...
+enriched = enrich_leads(scored)
+save_enriched(enriched)
+```
+
+### Korak 4: poženi
+```bash
+# NAJPREJ preveri stroške in status
+python3 preflight.py
+
+# Ko si prepričana, poženi z --run
+python3 preflight.py --run
+
+# ALI po korakih:
+python3 main.py collect         # zberi iz Maps
+python3 main.py diagnose        # diagnosticiraj strani
+python3 main.py score           # oceni leade
+python3 enrich.py output/leads_scored.csv --report   # obogati + report
+```
+
+## Novi output fajli
 
 | Datoteka | Vsebina |
 |---|---|
-| `businesses_maps.csv` | Podjetja iz Google Maps |
-| `businesses_bizi.csv` | Podjetja iz bizi.si |
-| `businesses_all.csv` | Zdruzeno, deduplicirano |
-| `diagnostics.csv` | Diagnostika spletnih strani |
-| `leads_scored.csv` | Koncni rezultat s scoring |
+| `output/leads_enriched.csv` | Obogateni leadi z GRS, prioriteto, golden flag |
+| `output/competitive_report.json` | Konkurenčni pregled (strojno berljiv) |
+| `output/competitive_report.txt` | Konkurenčni pregled (za Barbaro) |
 
-## Konfiguracija
+## Lead prioritetna formula
 
-Uredi `config.py`:
+| Signal | Točke |
+|---|---|
+| Brez spletne strani | +40 |
+| GBP profil brez strani | +15 |
+| Visoka ocena (4.5+) | +10 |
+| Veliko recenzij (30+) | +15 |
+| Golden lead bonus | +20 |
+| Obstoječi HOT | +10 |
+| Obstoječi WARM | +5 |
 
-- `SEARCH_CATEGORIES`: katere panoge iscemo
-- `SEARCH_LOCATIONS`: katera mesta
-- `SCORING`: utezi za posamezne kriterije
-- `HTTP_TIMEOUT`: timeout za preverjanje strani
+**Golden lead** = brez strani + ocena 4.0+ + 20+ recenzij. To so podjetja z dokazanim povpraševanjem, ki nimajo digitalnega kanala.
 
-## Lead scoring
+## AJPES: naslednji korak
 
-| Kriterij | Tocke | Pomen |
-|---|---|---|
-| Nima spletne strani | +40 | Najbolj vroce |
-| Ni SSL | +25 | Neprofesionalno |
-| Ni mobilno prilagojena | +20 | Izgublja stranke |
-| Pocasno nalaganje (>5s) | +15 | Slaba izkusnja |
-| Star copyright (>2 leti) | +15 | Zanemarjena stran |
-| Broken links | +15 | Zanemarjena stran |
-| Ni meta opisa | +10 | Slab SEO |
-| Ni naslova | +10 | Slab SEO |
-| Ni socialnih linkov | +10 | Ni digitalne prisotnosti |
-| Slike brez alt | +10 | Slab SEO |
-| Google ocena < 4.0 | +10 | Potencialne tezave |
-| < 10 Google recenzij | +10 | Slaba vidnost |
-| Ni favicona | +5 | Detajl |
-| Ni sitemap.xml | +5 | Slab SEO |
-| Ni robots.txt | +5 | Slab SEO |
-| Ni H1 naslova | +5 | Slab SEO |
+Ko bo potreba po uradnih podatkih (matična, davčna, datum ustanovitve):
+1. Registracija na ajpes.si (brezplačna)
+2. Naročilnica za restPrsInfo API
+3. `skd_mapping.py` že ima mapiranje za iskanje po SKD kodi
 
-### Klasifikacija
-
-- **HOT** (60+): takoj kontaktiraj
-- **WARM** (30 do 59): vredno pozornosti
-- **LOW** (pod 30): stran je solidna, ni nujno
-
-## Naslednji koraki
-
-- [ ] Telegram/email alert za nove HOT leade
-- [ ] Supabase baza namesto CSV
-- [ ] Dashboard (React/Next.js)
-- [ ] Periodicen cron job (tedensko skeniranje)
-- [ ] Generiranje PDF diagnosticnega porocila za stranko
+Testno okolje (Swagger): na AJPES strani, vrača 3 rezultate.
+Produkcijsko: po odobritvi naročilnice.
