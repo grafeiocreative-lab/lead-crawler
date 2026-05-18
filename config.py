@@ -90,7 +90,7 @@ MAPS_MAX_RESULTS = 20  # max na iskanje (API limit je 20)
 # DIAGNOSTIKA
 # ============================================================
 
-HTTP_TIMEOUT = 10          # timeout za HTTP zahteve (sekunde)
+HTTP_TIMEOUT = 5          # timeout za HTTP zahteve (sekunde)
 MAX_INTERNAL_LINKS_CHECK = 5
 
 # ============================================================

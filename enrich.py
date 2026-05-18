@@ -88,7 +88,7 @@ def compute_lead_flags(lead):
     """Dodaj boolean signalne zastavice leadu."""
     website = str(lead.get("website", "")).strip()
     rating = lead.get("rating", "") or lead.get("google_rating", "")
-    reviews = lead.get("reviews_count", "") or lead.get("google_reviews", "")
+    reviews = lead.get("reviews_count", "") or lead.get("google_reviews_count", "")
 
     has_website = bool(website) and website.lower() not in ("", "nan", "none")
     has_gbp = bool(lead.get("place_id", "")) or bool(lead.get("name", ""))
@@ -196,7 +196,7 @@ def compute_group_stats(leads):
     for l in leads:
         try:
             r = float(l.get("rating", 0) or l.get("google_rating", 0) or 0)
-            rc = int(float(l.get("reviews_count", 0) or l.get("google_reviews", 0) or 0))
+            rc = int(float(l.get("reviews_count", 0) or l.get("google_reviews_count", 0) or 0))
             rated_leads.append((l.get("name", ""), r, rc))
         except (ValueError, TypeError):
             pass
@@ -254,7 +254,7 @@ def enrich_leads(leads):
 
     for lead in leads:
         rating = lead.get("rating", "") or lead.get("google_rating", "")
-        reviews = lead.get("reviews_count", "") or lead.get("google_reviews", "")
+        reviews = lead.get("reviews_count", "") or lead.get("google_reviews_count", "")
 
         # Google Reviews Score
         grs = calculate_grs(rating, reviews)
