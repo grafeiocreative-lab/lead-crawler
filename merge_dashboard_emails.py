@@ -24,6 +24,7 @@ DASHBOARD_DIR = "../lead-dashboard"
 LEADS_JSON = os.path.join(DASHBOARD_DIR, "leads.json")
 ENRICHED_CSV = os.path.join(CRAWLER_OUTPUT, "leads_enriched.csv")
 WEB_SEARCH_CSV = os.path.join(CRAWLER_OUTPUT, "web_search_emails.csv")
+COMPANYWALL_CSV = os.path.join(CRAWLER_OUTPUT, "companywall_emails.csv")
 
 
 def load_csv_index(filepath, key_fields=("place_id",), fallback_fields=("name", "address")):
@@ -70,6 +71,10 @@ def main():
     web_pid, web_name = load_csv_index(WEB_SEARCH_CSV)
     print(f"  {len(web_pid)} po place_id, {len(web_name)} po imenu+naslovu")
 
+    print(f"Berem {COMPANYWALL_CSV} ...")
+    cw_pid, cw_name = load_csv_index(COMPANYWALL_CSV)
+    print(f"  {len(cw_pid)} po place_id, {len(cw_name)} po imenu+naslovu")
+
     print(f"Nalagam {LEADS_JSON} ...")
     with open(LEADS_JSON, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -79,6 +84,7 @@ def main():
 
     from_site = 0
     from_web = 0
+    from_companywall = 0
 
     for lead in leads:
         # Ze ima e-mail (npr. rocno vnesen prej) -> ne prepisuj
@@ -97,6 +103,13 @@ def main():
             lead["email"] = web_row["web_email"]
             lead["email_source"] = web_row.get("web_email_method", "splet")
             from_web += 1
+            continue
+
+        cw_row = lookup(cw_pid, cw_name, lead)
+        if cw_row and (cw_row.get("web_email") or "").strip():
+            lead["email"] = cw_row["web_email"]
+            lead["email_source"] = cw_row.get("web_email_method", "companywall")
+            from_companywall += 1
 
     # Varnostna kopija pred prepisom
     backup_path = LEADS_JSON + ".bak"
@@ -111,6 +124,7 @@ def main():
     print(f"\n=== KONČANO ===")
     print(f"Novih e-mailov iz lastne strani: {from_site}")
     print(f"Novih e-mailov iz spletnega iskanja: {from_web}")
+    print(f"Novih e-mailov iz companywall.si: {from_companywall}")
     print(f"Skupaj leadov z e-mailom zdaj: {total_with_email} / {len(leads)}")
     print(f"Posodobljeno: {LEADS_JSON}")
     print(f"\nOpomba: to je SAMO lokalna datoteka. Za objavo na grafeio-lead.netlify.app")
