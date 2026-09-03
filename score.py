@@ -194,6 +194,8 @@ def run_scoring(diagnostics):
             "social_count": diag.get("social_count", ""),
             "broken_links_count": diag.get("broken_links_count", ""),
             "generator": diag.get("generator", ""),
+            "email": diag.get("email", ""),
+            "email_source": diag.get("email_source", ""),
         })
 
     # Sortiraj: HOT > WARM > LOW, znotraj po score padajoce

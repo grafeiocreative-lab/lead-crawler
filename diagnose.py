@@ -36,6 +36,80 @@ SOCIAL_DOMAINS = {
     "tiktok.com": "tiktok",
 }
 
+EMAIL_REGEX = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
+
+# Domene in lokalni deli, ki so skoraj vedno placeholderji/tracking, ne pravi kontakt
+EMAIL_JUNK_DOMAINS = {
+    "sentry.io", "wixpress.com", "example.com", "domain.com", "email.com",
+    "yourdomain.com", "yoursite.com", "w3.org", "schema.org", "godaddy.com",
+    "godaddy.co", "wordpress.org", "wordpress.com", "gmpg.org", "cloudflare.com",
+    "google.com", "googleapis.com", "gstatic.com", "sentry-next.io",
+}
+EMAIL_JUNK_LOCALPARTS = {
+    "test", "example", "yourname", "name", "user", "someone", "no-reply",
+    "noreply",
+}
+
+# Poti, kjer je e-mail najpogosteje objavljen, ce ga ni na naslovnici
+CONTACT_PATHS = ["/kontakt", "/kontakti", "/contact", "/contact-us", "/o-nas", "/about"]
+
+
+def _is_junk_email(email):
+    """Preveri ali je e-mail ocitno placeholder/tracking, ne pravi kontakt."""
+    email = email.lower()
+    local, _, domain = email.partition("@")
+    if domain in EMAIL_JUNK_DOMAINS:
+        return True
+    if local in EMAIL_JUNK_LOCALPARTS:
+        return True
+    # Slike z density descriptorjem ("logo@2x.png") ujete kot lazen email
+    if re.search(r"\.(png|jpe?g|gif|svg|webp|ico)$", domain):
+        return True
+    return False
+
+
+def extract_emails(soup):
+    """Poisce e-mail naslove na strani: najprej mailto: linki, nato prosto besedilo."""
+    found = []
+
+    for a_tag in soup.find_all("a", href=True):
+        href = a_tag["href"]
+        if href.lower().startswith("mailto:"):
+            addr = href[7:].split("?")[0].strip()
+            if addr:
+                found.append(addr)
+
+    text = soup.get_text(" ", strip=True)
+    found.extend(EMAIL_REGEX.findall(text))
+
+    seen = set()
+    clean = []
+    for e in found:
+        e = e.strip().strip(".,;:").lower()
+        if not e or e in seen or _is_junk_email(e):
+            continue
+        seen.add(e)
+        clean.append(e)
+
+    return clean
+
+
+def find_contact_page_url(soup, base_url):
+    """Poisce interno povezavo na kontakt/o-nas stran, ce obstaja."""
+    base_parsed = urlparse(base_url)
+    for a_tag in soup.find_all("a", href=True):
+        href = a_tag["href"]
+        if href.lower().startswith(("mailto:", "tel:", "#", "javascript:")):
+            continue
+        full_url = urljoin(base_url, href)
+        parsed = urlparse(full_url)
+        if parsed.netloc != base_parsed.netloc:
+            continue
+        path = parsed.path.lower().rstrip("/")
+        if any(path == p or path.endswith(p) for p in CONTACT_PATHS):
+            return full_url
+    return None
+
 
 def check_ssl(domain):
     """Preveri ali ima domena veljaven SSL certifikat."""
@@ -170,6 +244,8 @@ def diagnose_website(url):
         "uses_wix": False,
         "uses_squarespace": False,
         "generator": "",
+        "email": "",
+        "email_source": "",
         "errors": "",
     }
 
@@ -262,6 +338,28 @@ def diagnose_website(url):
     result["social_links"] = ", ".join(f"{k}: {v}" for k, v in socials.items())
     result["social_count"] = len(socials)
 
+    # E-mail: najprej na naslovnici
+    emails = extract_emails(soup)
+    if emails:
+        result["email"] = "; ".join(emails[:3])
+        result["email_source"] = "naslovnica"
+    else:
+        # Ce ni na naslovnici, poskusi kontakt/o-nas stran (1 dodatna zahteva)
+        contact_url = find_contact_page_url(soup, result["url"])
+        if contact_url:
+            try:
+                c_resp = requests.get(
+                    contact_url, headers=HEADERS, timeout=HTTP_TIMEOUT
+                )
+                if c_resp.status_code == 200:
+                    c_soup = BeautifulSoup(c_resp.text, "lxml")
+                    c_emails = extract_emails(c_soup)
+                    if c_emails:
+                        result["email"] = "; ".join(c_emails[:3])
+                        result["email_source"] = "kontakt stran"
+            except Exception:
+                pass
+
     # CMS/generator detekcija
     generator = soup.find("meta", attrs={"name": "generator"})
     if generator:
@@ -344,6 +442,8 @@ def run_diagnostics(businesses):
                 "has_sitemap": False,
                 "uses_wordpress": False,
                 "generator": "",
+                "email": "",
+                "email_source": "",
                 "errors": "Nima spletne strani",
             })
             print(f"  [{i+1}/{total}] {name}: NIMA STRANI ★")

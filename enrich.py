@@ -93,6 +93,9 @@ def compute_lead_flags(lead):
     has_website = bool(website) and website.lower() not in ("", "nan", "none")
     has_gbp = bool(lead.get("place_id", "")) or bool(lead.get("name", ""))
 
+    email = str(lead.get("email", "")).strip()
+    has_email = bool(email) and email.lower() not in ("", "nan", "none")
+
     try:
         rating_val = float(rating) if rating else 0
     except (ValueError, TypeError):
@@ -106,6 +109,7 @@ def compute_lead_flags(lead):
     return {
         "has_website": has_website,
         "has_gbp": has_gbp,
+        "has_email": has_email,
         "gbp_no_website": has_gbp and not has_website,
         "high_rating": rating_val >= 4.5,
         "many_reviews": reviews_val >= 30,
@@ -271,6 +275,7 @@ def enrich_leads(leads):
             "grs": grs,
             "grs_level": grs_level,
             "gbp_no_website": "DA" if flags["gbp_no_website"] else "NE",
+            "has_email": "DA" if flags["has_email"] else "NE",
             "golden_lead": "DA" if flags["golden_lead"] else "NE",
             "high_rating": "DA" if flags["high_rating"] else "NE",
             "many_reviews": "DA" if flags["many_reviews"] else "NE",
