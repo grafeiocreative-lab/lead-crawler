@@ -127,3 +127,19 @@ Ko bo potreba po uradnih podatkih (matična, davčna, datum ustanovitve):
 
 Testno okolje (Swagger): na AJPES strani, vrača 3 rezultate.
 Produkcijsko: po odobritvi naročilnice.
+
+## Pošiljanje leadov v bazo (od 25. 10. 2026)
+
+Dashboard ne bere več datoteke `leads.json` iz repozitorija — podatki so v Supabase
+(tabeli `leads` in `leads_meta`) in vidni samo prijavljenima naslovoma lastnice.
+
+Po vsakem crawlu jih pošlji v bazo:
+
+```bash
+python push_to_supabase.py                 # prebere output/leads_scored.csv
+python push_to_supabase.py --json leads.json
+python push_to_supabase.py --dry-run       # preveri brez pošiljanja
+```
+
+V `.env` morata biti `SUPABASE_URL` in `SUPABASE_SERVICE_KEY` (glej `.env.example`).
+Ključ je skrbniški: ostane na tem računalniku in ne gre v git.
