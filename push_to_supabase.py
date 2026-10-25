@@ -139,6 +139,30 @@ def poslji(url: str, kljuc_api: str, tabela: str, vrstice: list[dict], na_konfli
             raise SystemExit(f"Povezava ni uspela: {e}")
 
 
+
+def prestej_v_bazi(url: str, kljuc_api: str, filter_izraz: str = "") -> int:
+    """Prešteje vrstice v tabeli leads (ob upoštevanju filtra) — za pravilen povzetek."""
+    pot = f"{url}/rest/v1/{TABELA}?select=id"
+    if filter_izraz:
+        pot += f"&{filter_izraz}"
+    zahteva = urllib.request.Request(pot, method="GET", headers={
+        "apikey": kljuc_api,
+        "Authorization": f"Bearer {kljuc_api}",
+        "Prefer": "count=exact",
+        "Range": "0-0",
+    })
+    try:
+        with urllib.request.urlopen(zahteva, timeout=60) as odgovor:
+            obseg = odgovor.headers.get("Content-Range", "")
+    except urllib.error.HTTPError as e:
+        obseg = e.headers.get("Content-Range", "") if e.headers else ""
+    if "/" in obseg:
+        zadnji = obseg.split("/")[-1].strip()
+        if zadnji.isdigit():
+            return int(zadnji)
+    return -1
+
+
 def main() -> int:
     okolje = preberi_env()
     url = okolje.get("SUPABASE_URL", "").rstrip("/")
@@ -195,8 +219,20 @@ def main() -> int:
         poslano += len(kos)
         print(f"  poslano {poslano}/{len(vrstice)}")
 
+    # Povzetek raje preštejemo v bazi, da ne bi ob delnem uvozu zapisali napačnih številk.
+    skupaj = prestej_v_bazi(url, kljuc_api)
+    if skupaj >= 0:
+        meta["total"] = skupaj
+        for kljuc_meta, vrednost in (("hot", "HOT"), ("warm", "WARM"), ("low", "LOW")):
+            n = prestej_v_bazi(url, kljuc_api, f"data->>classification=eq.{vrednost}")
+            if n >= 0:
+                meta[kljuc_meta] = n
+        n = prestej_v_bazi(url, kljuc_api, "data->>golden_lead=eq.DA")
+        if n >= 0:
+            meta["golden"] = n
     poslji(url, kljuc_api, META_TABELA, [{"id": "main", "data": meta}], "id")
-    print(f"Končano: {poslano} leadov v bazi, povzetek osvežen.")
+    print(f"Končano: {poslano} poslanih; v bazi skupaj {meta['total']} "
+          f"(HOT {meta['hot']}, WARM {meta['warm']}, LOW {meta['low']}, golden {meta['golden']}).")
     print("Dashboard jih zdaj bere iz baze (prijava je obvezna).")
     return 0
 
